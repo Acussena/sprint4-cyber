@@ -1,4 +1,4 @@
-# VERSÃO DE DIAGNÓSTICO FINAL - 15/09/2025
+# VERSÃO FINAL CORRIGIDA APÓS DIAGNÓSTICO COMPLETO
 
 name: Pipeline de Segurança (SAST e DAST)
 
@@ -8,48 +8,59 @@ on:
   workflow_dispatch:
 
 jobs:
-  # O job de SAST não é necessário para este teste, vamos desabilitá-lo para ser mais rápido
-  # codeql-analysis: ...
+  codeql-analysis:
+    name: Scan SAST com CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language/python"
 
   dast-zap-scan:
-    name: Scan DAST com OWASP ZAP (MODO DIAGNÓSTICO)
+    name: Scan DAST com OWASP ZAP
     runs-on: ubuntu-latest
-    # needs: codeql-analysis # Desabilitado para teste rápido
+    needs: codeql-analysis 
     steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
-
-      - name: Configurar ambiente Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+      - run: pip install Flask==1.1.1
+      
+      # CORREÇÃO 1: Adicionando o passo de permissão de volta
+      - name: Dar permissão de escrita para a pasta de trabalho
+        run: chmod -R 777 .
 
-      - name: Instalar dependências
-        run: pip install Flask==1.1.1
-
-      - name: Iniciar aplicação Flask em background
+      - name: Iniciar aplicação Flask e aguardar
         run: |
+          echo "Iniciando servidor Flask..."
+          # Inicia a aplicação em background
           python app.py &
-          sleep 15
-
-      # --- ETAPA DE DIAGNÓSTICO PRINCIPAL ---
-      - name: Executar Scan DAST e Diagnosticar Arquivos
+          # CORREÇÃO 2: Espera ativa até que o servidor responda
+          echo "Aguardando o servidor ficar pronto na porta 5000..."
+          timeout 30s bash -c 'until curl -s http://localhost:5000 > /dev/null; do echo "Aguardando..." && sleep 1; done'
+          echo "Servidor está pronto!"
+      
+      - name: Executar Scan DAST com ZAP via Docker
         run: |
-          echo "### Iniciando comando ZAP Docker..."
           docker run \
             --network=host \
             -v $(pwd):/zap/wrk/:rw \
             --workdir /zap/wrk \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py -t http://localhost:5000 -r dast-report.html || true
-          
-          echo "### Comando ZAP finalizado. Iniciando diagnóstico do sistema de arquivos..."
-          echo "### Conteúdo do diretório atual ($(pwd)):"
-          ls -la
-          echo "### Procurando pelo arquivo 'dast-report.html' em todo o workspace..."
-          find . -name "dast-report.html"
-          echo "### Diagnóstico finalizado."
-
-      - name: Tentativa de Exibir o relatório
+      
+      - name: Exibir o relatório DAST no log
         if: always()
-        run: cat dast-report.html
+        run: |
+          echo "----------------- INÍCIO DO RELATÓRIO DAST -----------------"
+          cat dast-report.html
+          echo "------------------ FIM DO RELATÓRIO DAST -------------------"
