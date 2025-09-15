@@ -50,7 +50,7 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          command: test
+          command: monitor
           args: --all-projects --severity-threshold=high
 
   # JOB 3: ANÁLISE DINÂMICA (DAST)
