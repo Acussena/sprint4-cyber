@@ -11,25 +11,32 @@ jobs:
   semgrep:
     name: Scan SAST com Semgrep
     runs-on: ubuntu-latest
+    permissions:
+      # Permissão necessária para o upload dos resultados para a aba Security
+      security-events: write
     steps:
       - name: Checkout do código
-        uses: actions/checkout@v3
+        # ATUALIZADO de v3 para v4
+        uses: actions/checkout@v4
 
       - name: Executar Semgrep
+        # Mantido em v2, que é a versão estável e recomendada
         uses: semgrep/semgrep-action@v2
         with:
           output-format: sarif
           output-file: semgrep.sarif
 
       - name: Upload do relatório SARIF como artefato
-        uses: actions/upload-artifact@v3
+        # ATUALIZADO de v3 para v4
+        uses: actions/upload-artifact@v4
         with:
           name: relatorio-sast-semgrep
           path: semgrep.sarif
           retention-days: 7
 
       - name: Upload SARIF para a aba de Segurança do GitHub
-        uses: github/codeql-action/upload-sarif@v2
+        # ATUALIZADO de v2 para v3
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: semgrep.sarif
           category: semgrep
