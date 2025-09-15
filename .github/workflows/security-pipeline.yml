@@ -1,6 +1,6 @@
-# VERSÃO DE DIAGNÓSTICO - LISTA ARQUIVOS
+# VERSÃO FINAL COM SAST, DAST E SCA
 
-name: Pipeline de Segurança (SAST e DAST)
+name: Pipeline de Segurança Completo
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
+  # JOB 1: ANÁLISE ESTÁTICA (SAST)
   codeql-analysis:
     name: Scan SAST com CodeQL
     runs-on: ubuntu-latest
@@ -27,10 +28,36 @@ jobs:
         with:
           category: "/language/python"
 
+  # JOB 2: ANÁLISE DE DEPENDÊNCIAS (SCA)
+  sca-snyk-scan:
+    name: Scan SCA com Snyk
+    runs-on: ubuntu-latest
+    needs: codeql-analysis # Roda após o SAST
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar ambiente Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Instalar dependências do projeto
+        run: pip install -r requirements.txt
+      
+      - name: Executar Snyk para encontrar vulnerabilidades
+        uses: snyk/actions/python@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+          args: --all-projects --severity-threshold=high
+
+  # JOB 3: ANÁLISE DINÂMICA (DAST)
   dast-zap-scan:
     name: Scan DAST com OWASP ZAP
     runs-on: ubuntu-latest
-    needs: codeql-analysis 
+    needs: codeql-analysis
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
@@ -47,12 +74,10 @@ jobs:
           echo "Aguardando 15 segundos para o servidor iniciar completamente..."
           sleep 15
       
-      # CORREÇÃO 1: Adicionando o passo de permissão de volta
       - name: Dar permissão de escrita para o ZAP
         run: |
           chmod -R 777 .
 
-      # CORREÇÃO 2: Forçando o ZAP a trabalhar na pasta correta
       - name: Executar Scan DAST com ZAP via Docker
         run: |
           docker run \
