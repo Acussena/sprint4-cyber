@@ -1,4 +1,4 @@
-# ATUALIZAÇÃO FORÇADA: 15/09/2025 15:55
+# VERSÃO DE DIAGNÓSTICO - LISTA ARQUIVOS
 
 name: Pipeline de Segurança (SAST e DAST)
 
@@ -47,17 +47,26 @@ jobs:
           echo "Aguardando 15 segundos para o servidor iniciar completamente..."
           sleep 15
       
-      - name: Executar Scan DAST com ZAP via Docker
+      # --- ETAPA DE DIAGNÓSTICO ---
+      - name: Executar Scan DAST e Diagnosticar Arquivos
         run: |
+          echo "Executando o comando ZAP Docker..."
           docker run \
             --network=host \
             -v $(pwd):/zap/wrk/:rw \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py -t http://localhost:5000 -r /zap/wrk/dast-report.html || true
+          
+          echo "================================================="
+          echo "Comando ZAP finalizado. Iniciando diagnóstico..."
+          echo "Data e hora atual: $(date)"
+          echo "Listando conteúdo do diretório atual ($(pwd)):"
+          ls -laR
+          echo "================================================="
+          echo "Diagnóstico finalizado."
       
       - name: Exibir o relatório DAST no log
         if: always()
         run: |
-          echo "----------------- INÍCIO DO RELATÓRIO DAST -----------------"
+          echo "Tentando exibir o relatório..."
           cat dast-report.html
-          echo "------------------ FIM DO RELATÓRIO DAST -------------------"
