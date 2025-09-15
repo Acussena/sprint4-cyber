@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # JOB 1: ANÁLISE ESTÁTICA (SAST)
+  # JOB 1: ANÁLISE ESTÁTICA (SAST) COM CODEQL
   codeql-analysis:
     name: Scan SAST com CodeQL
     runs-on: ubuntu-latest
@@ -30,13 +30,13 @@ jobs:
         with:
           category: "/language:python"
 
-  # JOB 2: ANÁLISE DINÂMICA (DAST) - CORREÇÃO DE PERMISSÃO FINAL
+  # JOB 2: ANÁLISE DINÂMICA (DAST) COM OWASP ZAP
   dast-zap-scan:
     name: Scan DAST com OWASP ZAP
     runs-on: ubuntu-latest
+    # Garante que o DAST só rode após o SAST ser concluído com sucesso
     needs: codeql-analysis 
-    # ---- ALTERAÇÃO AQUI ----
-    # Adicionamos a permissão para criar Issues
+    # Permissões necessárias para a action criar Issues no repositório
     permissions:
       contents: read
       issues: write
@@ -58,22 +58,24 @@ jobs:
           python app.py &
           echo "Aguardando 10 segundos para o servidor iniciar completamente..."
           sleep 10
-
+      
       - name: Dar permissão de escrita para o ZAP
+        # O container Docker do ZAP precisa de permissão para escrever o relatório na pasta de trabalho
         run: |
           chmod -R 777 .
 
       - name: Executar OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.11.0
         with:
-          # A linha "token: ''" foi REMOVIDA
           target: 'http://localhost:5000'
           cmd_options: '-r dast-report.html'
-
+      
       - name: Upload do Relatório DAST (HTML)
+        # Garante que o upload ocorra mesmo que o ZAP encontre vulnerabilidades
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          # Nome corrigido e validado para o artefato
           name: relatorio-dast-zap
           path: dast-report.html
           retention-days: 7
