@@ -1,11 +1,9 @@
-# VERSÃO FINAL COM COMMIT DO RELATÓRIO
+# VERSÃO FINAL - COMMIT DO RELATÓRIO - 15/09/2025
 
 name: Pipeline de Segurança (SAST e DAST)
 
 on:
   push:
-    branches: [ "main", "master" ]
-  pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
