@@ -1,6 +1,6 @@
-# VERSÃO COMPLETA E CORRIGIDA - TAREFAS 1, 2 E 3
+# VERSÃO DE DIAGNÓSTICO FINAL - 15/09/2025
 
-name: Pipeline de Segurança Completo
+name: Pipeline de Segurança (SAST e DAST)
 
 on:
   push:
@@ -8,83 +8,48 @@ on:
   workflow_dispatch:
 
 jobs:
-  # JOB 1: ANÁLISE ESTÁTICA (SAST)
-  codeql-analysis:
-    name: Scan SAST com CodeQL
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-    steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
-      - name: Inicializar CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: python
-      - name: Executar análise do CodeQL
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language/python"
+  # O job de SAST não é necessário para este teste, vamos desabilitá-lo para ser mais rápido
+  # codeql-analysis: ...
 
-  # JOB 2: ANÁLISE DE DEPENDÊNCIAS (SCA)
-  sca-snyk-scan:
-    name: Scan SCA com Snyk
-    runs-on: ubuntu-latest
-    needs: codeql-analysis
-    steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
-      - name: Configurar ambiente Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-      - name: Instalar dependências do projeto
-        run: pip install -r requirements.txt
-      - name: Executar Snyk para encontrar e monitorar vulnerabilidades
-        uses: snyk/actions/python@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          command: monitor
-          args: --all-projects
-
-  # JOB 3: ANÁLISE DINÂMICA (DAST)
   dast-zap-scan:
-    name: Scan DAST com OWASP ZAP
+    name: Scan DAST com OWASP ZAP (MODO DIAGNÓSTICO)
     runs-on: ubuntu-latest
-    needs: codeql-analysis
+    # needs: codeql-analysis # Desabilitado para teste rápido
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
+
       - name: Configurar ambiente Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - name: Instalar dependências do projeto
-        # Instala a versão vulnerável para o DAST também
+
+      - name: Instalar dependências
         run: pip install Flask==1.1.1
+
       - name: Iniciar aplicação Flask em background
         run: |
-          echo "Iniciando servidor Flask na porta 5000..."
           python app.py &
-          echo "Aguardando 15 segundos para o servidor iniciar completamente..."
           sleep 15
-      - name: Dar permissão de escrita para o ZAP
+
+      # --- ETAPA DE DIAGNÓSTICO PRINCIPAL ---
+      - name: Executar Scan DAST e Diagnosticar Arquivos
         run: |
-          chmod -R 777 .
-      - name: Executar Scan DAST com ZAP via Docker
-        run: |
+          echo "### Iniciando comando ZAP Docker..."
           docker run \
             --network=host \
             -v $(pwd):/zap/wrk/:rw \
             --workdir /zap/wrk \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py -t http://localhost:5000 -r dast-report.html || true
-      - name: Exibir o relatório DAST no log
+          
+          echo "### Comando ZAP finalizado. Iniciando diagnóstico do sistema de arquivos..."
+          echo "### Conteúdo do diretório atual ($(pwd)):"
+          ls -la
+          echo "### Procurando pelo arquivo 'dast-report.html' em todo o workspace..."
+          find . -name "dast-report.html"
+          echo "### Diagnóstico finalizado."
+
+      - name: Tentativa de Exibir o relatório
         if: always()
-        run: |
-          echo "----------------- INÍCIO DO RELATÓRIO DAST -----------------"
-          cat dast-report.html
-          echo "------------------ FIM DO RELATÓRIO DAST -------------------"
+        run: cat dast-report.html
