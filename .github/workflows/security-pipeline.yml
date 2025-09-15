@@ -47,26 +47,24 @@ jobs:
           echo "Aguardando 15 segundos para o servidor iniciar completamente..."
           sleep 15
       
-      # --- ETAPA DE DIAGNÓSTICO ---
-      - name: Executar Scan DAST e Diagnosticar Arquivos
+      # CORREÇÃO 1: Adicionando o passo de permissão de volta
+      - name: Dar permissão de escrita para o ZAP
         run: |
-          echo "Executando o comando ZAP Docker..."
+          chmod -R 777 .
+
+      # CORREÇÃO 2: Forçando o ZAP a trabalhar na pasta correta
+      - name: Executar Scan DAST com ZAP via Docker
+        run: |
           docker run \
             --network=host \
             -v $(pwd):/zap/wrk/:rw \
+            --workdir /zap/wrk \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://localhost:5000 -r /zap/wrk/dast-report.html || true
-          
-          echo "================================================="
-          echo "Comando ZAP finalizado. Iniciando diagnóstico..."
-          echo "Data e hora atual: $(date)"
-          echo "Listando conteúdo do diretório atual ($(pwd)):"
-          ls -laR
-          echo "================================================="
-          echo "Diagnóstico finalizado."
+            zap-baseline.py -t http://localhost:5000 -r dast-report.html || true
       
       - name: Exibir o relatório DAST no log
         if: always()
         run: |
-          echo "Tentando exibir o relatório..."
+          echo "----------------- INÍCIO DO RELATÓRIO DAST -----------------"
           cat dast-report.html
+          echo "------------------ FIM DO RELATÓRIO DAST -------------------"
