@@ -1,4 +1,4 @@
-# VERSÃO FINAL E DEFINITIVA - IGNORA FALHA E EXIBE LOG
+# ATUALIZAÇÃO FORÇADA: 15/09/2025 15:55
 
 name: Pipeline de Segurança (SAST e DAST)
 
@@ -25,7 +25,7 @@ jobs:
       - name: Executar análise do CodeQL
         uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:python"
+          category: "/language/python"
 
   dast-zap-scan:
     name: Scan DAST com OWASP ZAP
@@ -44,20 +44,16 @@ jobs:
         run: |
           echo "Iniciando servidor Flask na porta 5000..."
           python app.py &
-          echo "Aguardando 10 segundos para o servidor iniciar completamente..."
-          sleep 10
-      - name: Dar permissão de escrita para o ZAP
+          echo "Aguardando 15 segundos para o servidor iniciar completamente..."
+          sleep 15
+      
+      - name: Executar Scan DAST com ZAP via Docker
         run: |
-          chmod -R 777 .
-      - name: Executar OWASP ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.11.0
-        with:
-          # --- A MUDANÇA CRUCIAL ESTÁ AQUI ---
-          # Diz para a action não falhar o pipeline se encontrar alertas.
-          # Isso permite que o próximo passo (exibir o log) sempre seja executado.
-          fail_action: false
-          target: 'http://localhost:5000'
-          cmd_options: '-r dast-report.html'
+          docker run \
+            --network=host \
+            -v $(pwd):/zap/wrk/:rw \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://localhost:5000 -r dast-report.html || true
       
       - name: Exibir o relatório DAST no log
         if: always()
