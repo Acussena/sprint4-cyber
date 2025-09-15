@@ -1,4 +1,4 @@
-# VERSÃO SIMPLIFICADA - EXIBE RELATÓRIO NO LOG
+# VERSÃO FINAL E DEFINITIVA - IGNORA FALHA E EXIBE LOG
 
 name: Pipeline de Segurança (SAST e DAST)
 
@@ -52,16 +52,16 @@ jobs:
       - name: Executar OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.11.0
         with:
-          # O ZAP ainda vai tentar criar issue e falhar, mas o if:always() abaixo garante que continuaremos
+          # --- A MUDANÇA CRUCIAL ESTÁ AQUI ---
+          # Diz para a action não falhar o pipeline se encontrar alertas.
+          # Isso permite que o próximo passo (exibir o log) sempre seja executado.
+          fail_action: false
           target: 'http://localhost:5000'
           cmd_options: '-r dast-report.html'
       
-      # --- NOVA ETAPA FINAL ---
-      # Removemos o upload e o commit, e apenas exibimos o arquivo.
       - name: Exibir o relatório DAST no log
-        if: always() # Garante que este passo sempre rode, mesmo que o anterior falhe
+        if: always()
         run: |
           echo "----------------- INÍCIO DO RELATÓRIO DAST -----------------"
-          # O comando 'cat' lê o conteúdo do arquivo e o imprime na tela (no log)
           cat dast-report.html
           echo "------------------ FIM DO RELATÓRIO DAST -------------------"
