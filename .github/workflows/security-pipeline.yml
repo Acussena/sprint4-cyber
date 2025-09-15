@@ -1,4 +1,4 @@
-# VERSÃO FINAL COM SAST, DAST E SCA
+# VERSÃO COMPLETA E CORRIGIDA - TAREFAS 1, 2 E 3
 
 name: Pipeline de Segurança Completo
 
@@ -32,26 +32,23 @@ jobs:
   sca-snyk-scan:
     name: Scan SCA com Snyk
     runs-on: ubuntu-latest
-    needs: codeql-analysis # Roda após o SAST
+    needs: codeql-analysis
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
-
       - name: Configurar ambiente Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-
       - name: Instalar dependências do projeto
         run: pip install -r requirements.txt
-      
-      - name: Executar Snyk para encontrar vulnerabilidades
+      - name: Executar Snyk para encontrar e monitorar vulnerabilidades
         uses: snyk/actions/python@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           command: monitor
-          args: --all-projects --severity-threshold=high
+          args: --all-projects
 
   # JOB 3: ANÁLISE DINÂMICA (DAST)
   dast-zap-scan:
@@ -66,18 +63,17 @@ jobs:
         with:
           python-version: '3.x'
       - name: Instalar dependências do projeto
-        run: pip install -r requirements.txt
+        # Instala a versão vulnerável para o DAST também
+        run: pip install Flask==1.1.1
       - name: Iniciar aplicação Flask em background
         run: |
           echo "Iniciando servidor Flask na porta 5000..."
           python app.py &
           echo "Aguardando 15 segundos para o servidor iniciar completamente..."
           sleep 15
-      
       - name: Dar permissão de escrita para o ZAP
         run: |
           chmod -R 777 .
-
       - name: Executar Scan DAST com ZAP via Docker
         run: |
           docker run \
@@ -86,7 +82,6 @@ jobs:
             --workdir /zap/wrk \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py -t http://localhost:5000 -r dast-report.html || true
-      
       - name: Exibir o relatório DAST no log
         if: always()
         run: |
