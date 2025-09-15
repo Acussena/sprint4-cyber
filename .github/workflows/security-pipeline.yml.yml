@@ -30,7 +30,7 @@ jobs:
         with:
           category: "/language:python"
 
-  # JOB 2: ANÁLISE DINÂMICA (DAST)
+  # JOB 2: ANÁLISE DINÂMICA (DAST) - CORREÇÃO FINAL
   dast-zap-scan:
     name: Scan DAST com OWASP ZAP
     runs-on: ubuntu-latest
@@ -54,18 +54,17 @@ jobs:
           echo "Aguardando 10 segundos para o servidor iniciar completamente..."
           sleep 10
 
-      # ---- PASSO NOVO ADICIONADO AQUI ----
       - name: Dar permissão de escrita para o ZAP
-        # O container do ZAP roda com um usuário diferente (não-root)
-        # e precisa de permissão explícita para escrever o relatório na pasta de trabalho.
         run: |
           chmod -R 777 .
 
       - name: Executar OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.11.0
         with:
+          # ---- LINHA NOVA ADICIONADA AQUI ----
+          # Passamos um token vazio para desabilitar a criação de Issues no GitHub
+          token: '' 
           target: 'http://localhost:5000'
-          # Simplifiquei os cmd_options para gerar apenas o relatório que precisamos
           cmd_options: '-r dast-report.html'
 
       - name: Upload do Relatório DAST (HTML)
