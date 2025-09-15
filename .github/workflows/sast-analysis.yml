@@ -18,8 +18,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Executar Semgrep
-        # AJUSTE: Trocamos @v2 por uma versão específica para evitar problemas de resolução.
-        uses: semgrep/semgrep-action@v2.2.0 
+        # PLANO A: Voltando para @v2, agora que o resto do pipeline está corrigido.
+        uses: semgrep/semgrep-action@v2
         with:
           output-format: sarif
           output-file: semgrep.sarif
