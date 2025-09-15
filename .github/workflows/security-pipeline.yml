@@ -1,4 +1,5 @@
-# mais uma tentatiba
+# VERSÃO FINALMENTE CORRIGIDA 
+
 name: Pipeline de Segurança (SAST e DAST)
 
 on:
@@ -9,6 +10,7 @@ on:
   workflow_dispatch:
 
 jobs:
+  # JOB 1: ANÁLISE ESTÁTICA (SAST) COM CODEQL
   codeql-analysis:
     name: Scan SAST com CodeQL
     runs-on: ubuntu-latest
@@ -21,15 +23,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Inicializar CodeQL
-        uses: github/code-ql-action/init@v3
+        # CORREÇÃO: "codeql-action" em vez de "code-ql-action"
+        uses: github/codeql-action/init@v3
         with:
           languages: python
 
       - name: Executar análise do CodeQL
+        # CORREÇÃO: "codeql-action" em vez de "code-ql-action"
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:python"
 
+  # JOB 2: ANÁLISE DINÂMICA (DAST) COM OWASP ZAP
   dast-zap-scan:
     name: Scan DAST com OWASP ZAP
     runs-on: ubuntu-latest
