@@ -1,0 +1,35 @@
+name: Análise de Segurança Estática (SAST)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  semgrep:
+    name: Scan SAST com Semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v3
+
+      - name: Executar Semgrep
+        uses: semgrep/semgrep-action@v2
+        with:
+          output-format: sarif
+          output-file: semgrep.sarif
+
+      - name: Upload do relatório SARIF como artefato
+        uses: actions/upload-artifact@v3
+        with:
+          name: relatorio-sast-semgrep
+          path: semgrep.sarif
+          retention-days: 7
+
+      - name: Upload SARIF para a aba de Segurança do GitHub
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
