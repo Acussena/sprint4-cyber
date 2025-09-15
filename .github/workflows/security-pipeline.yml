@@ -1,4 +1,4 @@
-# VERSÃO FINAL - COMMIT DO RELATÓRIO - 15/09/2025
+# VERSÃO FINAL COM COMMIT DO RELATÓRIO - 15/09/2025
 
 name: Pipeline de Segurança (SAST e DAST)
 
@@ -18,12 +18,10 @@ jobs:
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
-
       - name: Inicializar CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: python
-
       - name: Executar análise do CodeQL
         uses: github/codeql-action/analyze@v3
         with:
@@ -39,32 +37,26 @@ jobs:
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
-
       - name: Configurar ambiente Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-
       - name: Instalar dependências do projeto
         run: pip install -r requirements.txt
-
       - name: Iniciar aplicação Flask em background
         run: |
           echo "Iniciando servidor Flask na porta 5000..."
           python app.py &
           echo "Aguardando 10 segundos para o servidor iniciar completamente..."
           sleep 10
-      
       - name: Dar permissão de escrita para o ZAP
         run: |
           chmod -R 777 .
-
       - name: Executar OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.11.0
         with:
           target: 'http://localhost:5000'
           cmd_options: '-r dast-report.html'
-      
       - name: Commit do relatório DAST para o repositório
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
