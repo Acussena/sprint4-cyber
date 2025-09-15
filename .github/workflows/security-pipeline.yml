@@ -1,4 +1,4 @@
-# VERSÃO FINALMENTE CORRIGIDA 
+# VERSÃO FINAL COM COMMIT DO RELATÓRIO
 
 name: Pipeline de Segurança (SAST e DAST)
 
@@ -10,7 +10,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  # JOB 1: ANÁLISE ESTÁTICA (SAST) COM CODEQL
   codeql-analysis:
     name: Scan SAST com CodeQL
     runs-on: ubuntu-latest
@@ -23,24 +22,21 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Inicializar CodeQL
-        # CORREÇÃO: "codeql-action" em vez de "code-ql-action"
         uses: github/codeql-action/init@v3
         with:
           languages: python
 
       - name: Executar análise do CodeQL
-        # CORREÇÃO: "codeql-action" em vez de "code-ql-action"
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:python"
 
-  # JOB 2: ANÁLISE DINÂMICA (DAST) COM OWASP ZAP
   dast-zap-scan:
     name: Scan DAST com OWASP ZAP
     runs-on: ubuntu-latest
     needs: codeql-analysis 
     permissions:
-      contents: read
+      contents: write
       issues: write
     steps:
       - name: Checkout do código
@@ -71,10 +67,11 @@ jobs:
           target: 'http://localhost:5000'
           cmd_options: '-r dast-report.html'
       
-      - name: Upload do Relatório DAST (HTML)
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Commit do relatório DAST para o repositório
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          name: relatorio-dast-zap
-          path: dast-report.html
-          retention-days: 7
+          commit_message: "chore(DAST): Adiciona relatório do scan ZAP"
+          file_pattern: dast-report.html
+          commit_user_name: GitHub Actions Bot
+          commit_user_email: actions@github.com
+          commit_author: GitHub Actions Bot <actions@github.com>
