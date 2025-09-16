@@ -20,6 +20,7 @@ ESPY
 
 O projeto está organizado da seguinte forma para garantir clareza e separação de responsabilidades:
 
+```
 ESPY-Sprint3-Cybersecurity/
 ├── .github/
 │   └── workflows/
@@ -29,6 +30,7 @@ ESPY-Sprint3-Cybersecurity/
 ├── README.md
 ├── relatorio-dast.html
 └── requirements.txt
+```
 
 * **`.github/workflows/security-pipeline.yml`**: Ficheiro principal que define todo o workflow do GitHub Actions. Contém os jobs, passos, gatilhos e a configuração de todas as ferramentas de segurança (Snyk, CodeQL, ZAP).
 * **`app.py`**: A aplicação web de exemplo, construída com o micro-framework Flask.
