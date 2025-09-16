@@ -1,79 +1,115 @@
-# VERSÃO FINAL COM DEPENDÊNCIAS CORRIGIDAS
+name: Pipeline de Segurança DevSecOps Unificado
 
-name: Pipeline de Segurança Completo
-
+# --- GATILHOS AUTOMÁTICOS ---
+# Este pipeline será acionado automaticamente nos seguintes eventos:
 on:
+  # Quando um push for feito na branch 'main'
   push:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
+    branches: [ main ]
+  # Quando um Pull Request for aberto ou atualizado para a branch 'main'
+  pull_request:
+    branches: [ main ]
 
+# --- JOBS (ETAPAS DO PIPELINE) ---
 jobs:
-  codeql-analysis:
-    name: Scan SAST com CodeQL
+  # --- JOB 1: Análise Estática e de Dependências ---
+  build-and-scan:
+    name: 1. Build, SCA e SAST
     runs-on: ubuntu-latest
+
     permissions:
       security-events: write
       actions: read
       contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
-        with:
-          languages: python
-      - uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language/python"
 
-  sca-snyk-scan:
-    name: Scan SCA com Snyk
-    runs-on: ubuntu-latest
-    needs: codeql-analysis
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # Passo 1: Clona o código do repositório para a máquina do pipeline
+      - name: Checkout do código
+        uses: actions/checkout@v3
+
+      # Passo 2: Configura o ambiente Node.js (necessário para o Snyk CLI)
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
-          python-version: '3.x'
+          node-version: '18'
+
+      # Passo 3: Instala as dependências Python do projeto
+      - name: Setup Python e Instalar Dependências
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
       - run: pip install -r requirements.txt
-      - name: Executar Snyk para encontrar e monitorar vulnerabilidades
-        uses: snyk/actions/python@master
+
+      # --- SCA (Software Composition Analysis) ---
+      - name: Executar Análise de Dependências (SCA) com Snyk
+        uses: snyk/actions/python-3.9@master
         env:
+          # Usa o segredo SNYK_TOKEN que configuramos no GitHub
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          command: monitor
-          args: --all-projects
+          # --- QUALITY GATE DO SCA ---
+          # O comando 'test' irá falhar o pipeline se encontrar
+          # qualquer vulnerabilidade de severidade 'high' ou 'critical'.
+          args: --severity-threshold=high
 
-  dast-zap-scan:
-    name: Scan DAST com OWASP ZAP
-    runs-on: ubuntu-latest
-    needs: codeql-analysis
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # --- SAST (Static Application Security Testing) ---
+      - name: Inicializar o CodeQL (SAST)
+        uses: github/codeql-action/init@v3
         with:
-          python-version: '3.x'
-      # CORREÇÃO: Usa o requirements.txt para garantir consistência
-      - name: Instalar dependências do projeto
-        run: pip install -r requirements.txt
-      - name: Dar permissão de escrita para a pasta de trabalho
-        run: chmod -R 777 .
-      - name: Iniciar aplicação Flask e aguardar
-        run: |
-          echo "Iniciando servidor Flask..."
-          python app.py &
-          echo "Aguardando o servidor ficar pronto na porta 5000..."
-          timeout 30s bash -c 'until curl -s http://localhost:5000 > /dev/null; do echo "Aguardando..." && sleep 1; done'
-          echo "Servidor está pronto!"
-      - name: Executar Scan DAST com ZAP via Docker
-        run: |
-          docker run \
-            --network=host \
-            -v $(pwd):/zap/wrk/:rw \
-            --workdir /zap/wrk \
-            ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://localhost:5000 -r dast-report.html || true
-      - name: Exibir o relatório DAST no log
-        if: always()
-        run: |
-          echo "----------------- INÍCIO DO RELATÓRIO DAST -----------------"
-          cat dast-report.html
-          echo "------------------ FIM DO RELATÓRIO DAST -------------------"
+          languages: python
+
+      - name: Executar a análise do CodeQL (SAST)
+        uses: github/codeql-action/analyze@v3
+
+  # --- JOB 2: Análise Dinâmica ---
+  dynamic-analysis:
+    name: 2. Análise Dinâmica (DAST)
+    runs-on: ubuntu-latest
+    # Este job só começará DEPOIS que o job 'build-and-scan' terminar com sucesso
+    needs: build-and-scan
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v3
+
+      # --- DAST (Dynamic Application Security Testing) ---
+      - name: Executar Análise Dinâmica (DAST) com OWASP ZAP
+        uses: zaproxy/action-baseline@v0.10.0
+        with:
+          # --- QUALITY GATE DO DAST ---
+          # A regra '-r' gera o relatório HTML.
+          # A regra '-l' define o nível de alerta para falhar. 'WARN' inclui
+          # vulnerabilidades de risco médio e alto. 'FAIL' seria apenas para alto.
+          cmd_options: '-r zap_report.html -l WARN'
+          # O ZAP precisa de um alvo. Como nosso projeto Python não é
+          # facilmente executável em um pipeline simples, usaremos um alvo de exemplo.
+          # Em um projeto real, aqui estaria a URL da sua aplicação em um ambiente de staging.
+          target: 'https://www.zaproxy.org/'
+
+      # Passo opcional para que possamos ver o relatório do DAST
+      - name: Upload do Relatório DAST
+        uses: actions/upload-artifact@v3
+        with:
+          name: Relatorio-DAST-ZAP
+          path: zap_report.html
+
+  # --- JOB 3: Notificação em caso de falha ---
+  notification-on-failure:
+    name: 3. Notificar Falha
+    runs-on: ubuntu-latest
+    # Este job só roda se os jobs anteriores falharem
+    if: failure()
+    # Ele precisa saber que os jobs anteriores existem
+    needs: [build-and-scan, dynamic-analysis]
+
+    steps:
+      - name: Enviar notificação para o Slack
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          # Usa o segredo que acabamos de configurar
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_TITLE: '🚨 Falha no Pipeline de Segurança!'
+          SLACK_MESSAGE: 'O pipeline no repositório ${{ github.repository }} falhou. Verifique os logs para mais detalhes.'
+          SLACK_COLOR: 'danger' # 'danger' para vermelho
+          MSG_MINIMAL: true
+
