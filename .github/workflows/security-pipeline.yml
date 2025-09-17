@@ -1,58 +1,44 @@
 name: Pipeline de Segurança DevSecOps Unificado
 
-# --- GATILHOS AUTOMÁTICOS ---
-# Este pipeline será acionado automaticamente nos seguintes eventos:
 on:
-  # Quando um push for feito na branch 'main'
   push:
     branches: [ main ]
-  # Quando um Pull Request for aberto ou atualizado para a branch 'main'
   pull_request:
     branches: [ main ]
 
-# --- JOBS (ETAPAS DO PIPELINE) ---
 jobs:
-  # --- JOB 1: Análise Estática e de Dependências ---
+  # Job 1: Análise Estática e de Dependências
   build-and-scan:
     name: 1. Build, SCA e SAST
     runs-on: ubuntu-latest
-
     permissions:
       security-events: write
       actions: read
       contents: read
 
     steps:
-      # Passo 1: Clona o código do repositório para a máquina do pipeline
       - name: Checkout do código
         uses: actions/checkout@v3
 
-      # Passo 2: Configura o ambiente Node.js (necessário para o Snyk CLI)
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
-      # Passo 3: Instala as dependências Python do projeto
       - name: Setup Python e Instalar Dependências
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
       - run: pip install -r requirements.txt
 
-      # --- SCA (Software Composition Analysis) ---
       - name: Executar Análise de Dependências (SCA) com Snyk
         uses: snyk/actions/python-3.9@master
         env:
-          # Usa o segredo SNYK_TOKEN que configuramos no GitHub
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          # --- QUALITY GATE DO SCA ---
-          # O comando 'test' irá falhar o pipeline se encontrar
-          # qualquer vulnerabilidade de severidade 'high' ou 'critical'.
+          # Quality Gate: Falha se encontrar vulnerabilidades de severidade 'high' ou 'critical'
           args: --severity-threshold=high
 
-      # --- SAST (Static Application Security Testing) ---
       - name: Inicializar o CodeQL (SAST)
         uses: github/codeql-action/init@v3
         with:
@@ -61,55 +47,42 @@ jobs:
       - name: Executar a análise do CodeQL (SAST)
         uses: github/codeql-action/analyze@v3
 
-  # --- JOB 2: Análise Dinâmica ---
+  # Job 2: Análise Dinâmica
   dynamic-analysis:
     name: 2. Análise Dinâmica (DAST)
     runs-on: ubuntu-latest
-    # Este job só começará DEPOIS que o job 'build-and-scan' terminar com sucesso
     needs: build-and-scan
 
     steps:
       - name: Checkout do código
         uses: actions/checkout@v3
 
-      # --- DAST (Dynamic Application Security Testing) ---
       - name: Executar Análise Dinâmica (DAST) com OWASP ZAP
         uses: zaproxy/action-baseline@v0.10.0
         with:
-          # --- QUALITY GATE DO DAST ---
-          # A regra '-r' gera o relatório HTML.
-          # A regra '-l' define o nível de alerta para falhar. 'WARN' inclui
-          # vulnerabilidades de risco médio e alto. 'FAIL' seria apenas para alto.
+          # Quality Gate: Falha para alertas de nível 'WARN' (Médio) ou superior
           cmd_options: '-r zap_report.html -l WARN'
-          # O ZAP precisa de um alvo. Como nosso projeto Python não é
-          # facilmente executável em um pipeline simples, usaremos um alvo de exemplo.
-          # Em um projeto real, aqui estaria a URL da sua aplicação em um ambiente de staging.
           target: 'https://www.zaproxy.org/'
 
-      # Passo opcional para que possamos ver o relatório do DAST
       - name: Upload do Relatório DAST
         uses: actions/upload-artifact@v3
         with:
           name: Relatorio-DAST-ZAP
           path: zap_report.html
 
-  # --- JOB 3: Notificação em caso de falha ---
+  # Job 3: Notificação em caso de falha
   notification-on-failure:
     name: 3. Notificar Falha
     runs-on: ubuntu-latest
-    # Este job só roda se os jobs anteriores falharem
     if: failure()
-    # Ele precisa saber que os jobs anteriores existem
     needs: [build-and-scan, dynamic-analysis]
 
     steps:
       - name: Enviar notificação para o Slack
         uses: rtCamp/action-slack-notify@v2
         env:
-          # Usa o segredo que acabamos de configurar
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_TITLE: '🚨 Falha no Pipeline de Segurança!'
           SLACK_MESSAGE: 'O pipeline no repositório ${{ github.repository }} falhou. Verifique os logs para mais detalhes.'
-          SLACK_COLOR: 'danger' # 'danger' para vermelho
+          SLACK_COLOR: 'danger'
           MSG_MINIMAL: true
-
