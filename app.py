@@ -83,14 +83,11 @@ def login():
     cursor = db.execute("SELECT * FROM users WHERE username=?", (username,))
     user = cursor.fetchone()
 
-    if not user:
-        db.close()
-        return jsonify({"message": "Usuário não encontrado"}), 404
-
     password_hash = hashlib.sha256(password.encode()).hexdigest()
-    if password_hash != user["password_hash"]:
+
+    if not user or password_hash != user["password_hash"]:
         db.close()
-        return jsonify({"message": "Senha incorreta"}), 401
+        return jsonify({"message": "Usuário ou senha incorretos"}), 401
 
     # Registrar consentimento LGPD
     if consent == "true" or consent == "on":

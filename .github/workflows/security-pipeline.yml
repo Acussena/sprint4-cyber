@@ -34,6 +34,7 @@ jobs:
 
       - name: Rodar testes com pytest
         run: |
+          export PYTHONPATH=$PYTHONPATH:$(pwd)
           mkdir -p reports
           pytest tests/ --maxfail=1 --disable-warnings -v | tee reports/pytest.log
         continue-on-error: false
