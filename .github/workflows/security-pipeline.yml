@@ -31,7 +31,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-cov PyJWT
+          pip install pytest pytest-cov PyJWT snyk
 
       # Inicializar banco SQLite para testes
       - name: Criar banco de dados SQLite
@@ -43,11 +43,7 @@ jobs:
           mkdir -p reports
           pytest tests/ --maxfail=1 --disable-warnings -v | tee reports/pytest.log
 
-      # Instalar Snyk CLI
-      - name: Instalar Snyk CLI
-        run: npm install -g snyk
-
-      # Executar SCA com Snyk
+      # Análise de Dependências (SCA) com Snyk
       - name: Executar SCA com Snyk
         run: snyk test --severity-threshold=high --fail-on=all --skip-unresolved
         env:
@@ -87,26 +83,21 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov PyJWT
 
-      # Rodar Flask em background
+      # Rodar Flask em background (espera até estar pronto)
       - name: Iniciar servidor Flask
         run: |
           mkdir -p reports
           nohup python app.py &> reports/flask.log &
-          # Espera até o Flask estar disponível
           for i in {1..30}; do
             curl -f http://127.0.0.1:5000/ && break || sleep 2
           done
 
-      # Instalar OWASP ZAP
-      - name: Instalar OWASP ZAP
-        run: sudo apt-get update && sudo apt-get install -y zaproxy
-
-      # Executar DAST com OWASP ZAP
+      # Executar DAST com OWASP ZAP (Action oficial)
       - name: Executar DAST com OWASP ZAP
         uses: zaproxy/action-baseline@v0.10.0
         with:
-          cmd_options: "-r reports/zap_report.html -l FAIL"
           target: "http://127.0.0.1:5000"
+          cmd_options: "-r reports/zap_report.html -l FAIL"
 
       # Upload do Relatório DAST
       - name: Upload do Relatório DAST
