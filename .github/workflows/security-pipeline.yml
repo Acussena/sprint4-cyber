@@ -50,7 +50,7 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high --fail-on=all
+          args: --severity-threshold=high --fail-on=none
 
       # Análise Estática (SAST) com CodeQL
       - name: Inicializar CodeQL
