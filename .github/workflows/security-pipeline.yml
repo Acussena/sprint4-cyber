@@ -29,8 +29,10 @@ jobs:
       - name: Instalar dependências Python
         run: |
           python -m pip install --upgrade pip
+          # Instalar pacotes antigos fixos sem resolver dependências
           pip install --no-deps -r requirements.txt
-          pip install --no-deps pytest pytest-cov pyjwt
+          # Instalar pytest e dependências completas
+          pip install pytest pytest-cov pyjwt
 
       # Inicializar banco SQLite para testes
       - name: Criar banco de dados SQLite
