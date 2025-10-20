@@ -27,7 +27,8 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-cov PyJWT gunicorn # Adicionei gunicorn para rodar o app
+          # Instala dependências de teste e servidor WSGI para uso futuro
+          pip install pytest pytest-cov PyJWT gunicorn
 
       - name: Inicializar banco de dados SQLite
         # Cria e inicializa o database.db para os testes
@@ -63,7 +64,7 @@ jobs:
         env:
           CODEQL_FAIL_ON_ALERT: "true"
 
-      # --- PASSO NOVO: Compartilhar o database.db para o DAST ---
+      # Compartilha o arquivo de banco de dados SQLite para o job DAST
       - name: Upload do Database SQLite
         uses: actions/upload-artifact@v4
         with:
@@ -75,13 +76,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-scan
 
-    # NÃO HÁ SEÇÃO 'SERVICES' POIS USAMOS SQLite
+    # --- CONFIGURAÇÃO DAST SEM DOCKER (USA FLASK NO HOST + ZAP EM CONTAINER) ---
 
     steps:
       - uses: actions/checkout@v3
 
-      # --- Download e Re-instalação para o Job DAST ---
       - name: Download do Database SQLite
+        # Baixa o arquivo database.db criado no job anterior
         uses: actions/download-artifact@v4
         with:
           name: application-db
@@ -92,15 +93,15 @@ jobs:
           python-version: "3.10"
 
       - name: Instalar dependências Python
+        # Repete a instalação para garantir que o novo runner tenha todas as dependências
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest PyJWT gunicorn # Instala gunicorn para rodar o app
+          pip install pytest PyJWT gunicorn
 
-      # --- Inicia a Aplicação Flask (sem Docker) ---
       - name: Iniciar Aplicação Flask em background
         run: |
-          # Rodar o Flask na porta 5000 do host, usando gunicorn
+          # Usa gunicorn para rodar o Flask na porta 5000 do host
           gunicorn --bind 0.0.0.0:5000 app:app &
           FLASK_PID=$!
           echo "FLASK_PID=$FLASK_PID" >> $GITHUB_ENV
@@ -125,15 +126,14 @@ jobs:
       - name: Criar pasta reports
         run: mkdir -p reports
 
-      # --- Executa o ZAP (em Container) acessando o Host (Flask) ---
       - name: Executar ZAP Baseline Scan (Comando Docker Direto)
         run: |
-          # TARGET: O ZAP (em container) acessa a aplicação (no host) via host.docker.internal
+          # TARGET: O ZAP (em container) acessa o Flask (no host) via host.docker.internal
           TARGET="http://host.docker.internal:5000"
-          REPORT_DIR="/zap/wrk"
 
-          # Usamos --network host para garantir que o container ZAP possa acessar 
-          # serviços rodando no host (VM do GitHub Actions) na porta 5000.
+          # CORREÇÃO DO ERRO DE PERMISSÃO: Altera o diretório de saída para 'out'
+          REPORT_DIR="/zap/out" 
+
           docker run --rm -v ${{ github.workspace }}/reports:${REPORT_DIR}:rw \
             --network host \
             ghcr.io/zaproxy/zaproxy:stable \
@@ -162,7 +162,7 @@ jobs:
           path: reports/
 
       - name: Encerrar Aplicação Flask
-        # Mata o processo do Flask iniciado em background
+        # Executa sempre, mesmo que o ZAP falhe, para liberar o processo em background
         if: always()
         run: kill ${{ env.FLASK_PID }}
 
