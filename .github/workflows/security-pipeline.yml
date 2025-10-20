@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: "3.9"
 
-      # Instalar dependências Python
+      # Instalar dependências Python antes de importar app.py
       - name: Instalar dependências Python
         run: |
           python -m pip install --upgrade pip
@@ -43,7 +43,11 @@ jobs:
           mkdir -p reports
           pytest tests/ --maxfail=1 --disable-warnings -v | tee reports/pytest.log
 
-      # Análise de Dependências (SCA) com Snyk
+      # Instalar Snyk CLI
+      - name: Instalar Snyk CLI
+        run: npm install -g snyk
+
+      # Executar SCA com Snyk
       - name: Executar SCA com Snyk
         run: snyk test --severity-threshold=high --fail-on=all --skip-unresolved
         env:
@@ -81,21 +85,28 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-cov PyJWT python-owasp-zap-v2.4
+          pip install pytest pytest-cov PyJWT
 
       # Rodar Flask em background
       - name: Iniciar servidor Flask
         run: |
           mkdir -p reports
           nohup python app.py &> reports/flask.log &
+          # Espera até o Flask estar disponível
           for i in {1..30}; do
             curl -f http://127.0.0.1:5000/ && break || sleep 2
           done
 
-      # Executar DAST com OWASP ZAP usando Python CLI
+      # Instalar OWASP ZAP
+      - name: Instalar OWASP ZAP
+        run: sudo apt-get update && sudo apt-get install -y zaproxy
+
+      # Executar DAST com OWASP ZAP
       - name: Executar DAST com OWASP ZAP
-        run: |
-          python -m zapv2.zapcli --target http://127.0.0.1:5000 --report reports/zap_report.html --exit-code 1
+        uses: zaproxy/action-baseline@v0.10.0
+        with:
+          cmd_options: "-r reports/zap_report.html -l FAIL"
+          target: "http://127.0.0.1:5000"
 
       # Upload do Relatório DAST
       - name: Upload do Relatório DAST
@@ -112,17 +123,7 @@ jobs:
     needs: [build-and-scan, dynamic-analysis]
 
     steps:
-      - name: Verificar Slack Webhook
-        run: |
-          if [ -z "${SLACK_WEBHOOK}" ]; then
-            echo "Secret SLACK_WEBHOOK não definido. Pulando notificação."
-            exit 0
-          fi
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-
       - name: Enviar notificação para o Slack
-        if: success() == false
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
