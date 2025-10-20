@@ -20,7 +20,7 @@ jobs:
       - name: Checkout do código
         uses: actions/checkout@v3
 
-      # --- Setup Python ---
+      # Setup Python
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -30,27 +30,27 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-cov sqlite3 jwt
+          pip install pytest pytest-cov jwt
 
-      # --- Inicializar banco SQLite para testes ---
+      # Inicializar banco SQLite para testes
       - name: Criar banco de dados SQLite
-        run: |
-          python -c "from app import init_db; init_db()"
+        run: python -c "from app import init_db; init_db()"
 
-      # --- Rodar Testes Unitários ---
+      # Rodar Testes Unitários
       - name: Rodar testes com pytest
         run: |
-          pytest tests/ --maxfail=1 --disable-warnings -v
+          mkdir -p reports
+          pytest tests/ --maxfail=1 --disable-warnings -v | tee reports/pytest.log
 
-      # --- Análise de Dependências (SCA) com Snyk ---
+      # Análise de Dependências (SCA) com Snyk
       - name: Executar SCA com Snyk
         uses: snyk/actions/python-3.9@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high
+          args: --severity-threshold=high --fail-on=all
 
-      # --- Análise Estática (SAST) com CodeQL ---
+      # Análise Estática (SAST) com CodeQL
       - name: Inicializar CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -58,6 +58,8 @@ jobs:
 
       - name: Executar análise CodeQL
         uses: github/codeql-action/analyze@v3
+        env:
+          CODEQL_FAIL_ON_ALERT: "true"
 
   # Job 2: Análise Dinâmica (DAST)
   dynamic-analysis:
@@ -69,7 +71,7 @@ jobs:
       - name: Checkout do código
         uses: actions/checkout@v3
 
-      # --- Setup Python ---
+      # Setup Python
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -80,25 +82,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # --- Rodar Flask em background ---
+      # Rodar Flask em background
       - name: Iniciar servidor Flask
         run: |
-          nohup python app.py &
+          nohup python app.py &> reports/flask.log &
           sleep 5
 
-      # --- Executar DAST com OWASP ZAP ---
+      # Executar DAST com OWASP ZAP
       - name: Executar DAST com OWASP ZAP
         uses: zaproxy/action-baseline@v0.10.0
         with:
-          cmd_options: "-r zap_report.html -l WARN"
-          target: "http://127.0.0.1:5000" # seu Flask local
+          cmd_options: "-r reports/zap_report.html -l FAIL"
+          target: "http://127.0.0.1:5000"
 
-      # --- Upload do Relatório DAST ---
+      # Upload do Relatório DAST
       - name: Upload do Relatório DAST
         uses: actions/upload-artifact@v3
         with:
           name: Relatorio-DAST-ZAP
-          path: zap_report.html
+          path: reports/zap_report.html
 
   # Job 3: Notificação em caso de falha
   notification-on-failure:

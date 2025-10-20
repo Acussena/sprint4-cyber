@@ -69,6 +69,7 @@ def run_tests():
 def home():
     return render_template("index.html")
 
+# ---------------- Rotas ----------------
 @app.route("/login", methods=["POST"])
 def login():
     username = request.form.get("username")
@@ -98,14 +99,18 @@ def login():
 
     db.close()
 
+    # Definir role admin apenas para usuário 'admin'
+    role = "admin" if username == "admin" else "user"
+
     # Criar token JWT
     token = jwt.encode(
-        {"username": username, "role": "user", "exp": datetime.utcnow() + timedelta(minutes=30)},
+        {"username": username, "role": role, "exp": datetime.utcnow() + timedelta(minutes=30)},
         API_SECRET_KEY,
         algorithm="HS256"
     )
 
     return jsonify({"message": f"Login bem-sucedido para {username}", "token": token})
+
 
 @app.route("/dashboard")
 def dashboard():

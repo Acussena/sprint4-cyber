@@ -25,9 +25,6 @@
     <div class="max-w-4xl w-full bg-white shadow-2xl rounded-xl p-8 lg:p-12">
         <header class="mb-10 border-b pb-4">
             <h1 class="text-3xl font-extrabold text-gray-900 flex items-center">
-                <svg class="w-8 h-8 mr-3 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944c-1.385.083-2.736.438-4.002 1.056C5.975 4.885 4.936 5.86 4.148 7.025c-.788 1.165-1.229 2.518-1.229 3.903 0 1.385.441 2.738 1.229 3.903.788 1.165 1.827 2.14 3.05 2.775 1.266.618 2.617.973 4.002 1.056a11.955 11.955 0 014.354-.035c1.474-.153 2.87-1.16 4.025-2.28 1.155-1.12 2.016-2.56 2.45-4.104.434-1.544.536-3.136.31-4.697A11.955 11.955 0 0112 3.056z"></path>
-                </svg>
                 Relatório de Correção DAST
             </h1>
             <p class="text-gray-500 mt-2">Demonstração das vulnerabilidades corrigidas no código Python.</p>
@@ -56,14 +53,6 @@
             </div>
         </section>
 
-        <!-- Dashboard Protegido -->
-        <section id="dashboard-section" class="hidden p-6 bg-white rounded-lg shadow border border-gray-200 mb-10">
-            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Bem-vindo ao Dashboard Protegido</h2>
-            <button id="back-btn" class="bg-gray-300 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-400 font-bold">
-                ← Voltar ao Menu
-            </button>
-        </section>
-
         <!-- Seção XSS -->
         <section class="mb-10 p-6 bg-green-50 border-l-4 border-green-500 rounded-lg shadow-inner">
             <h2 class="text-2xl font-semibold text-gray-800 mb-4">XSS Refletido</h2>
@@ -83,10 +72,6 @@
                 <div id="hash-result" class="mt-4 p-3 rounded-md hidden"></div>
             </div>
         </section>
-
-        <footer class="mt-10 pt-4 border-t text-sm text-gray-500 text-center">
-            <p>Observação: Todas as respostas são exibidas na mesma tela usando AJAX.</p>
-        </footer>
     </div>
 
     <!-- Scripts AJAX -->
@@ -131,14 +116,24 @@
 
         // Botão dashboard
         document.getElementById('dashboard-btn').addEventListener('click', () => {
-            document.getElementById('menu-section').classList.add('hidden');
-            document.getElementById('dashboard-section').classList.remove('hidden');
-        });
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                alert('Sessão expirada. Faça login novamente.');
+                window.location.href = '/';
+                return;
+            }
 
-        // Botão voltar ao menu
-        document.getElementById('back-btn').addEventListener('click', () => {
-            document.getElementById('dashboard-section').classList.add('hidden');
-            document.getElementById('menu-section').classList.remove('hidden');
+            // Verifica se o token expirou
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const now = Math.floor(Date.now() / 1000);
+
+            if (payload.exp < now) {
+                alert('Token expirado. Faça login novamente.');
+                localStorage.removeItem('jwt_token');
+                window.location.href = '/';
+            } else {
+                window.location.href = `/dashboard?token=${token}`;
+            }
         });
 
         // XSS AJAX
