@@ -85,11 +85,14 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov PyJWT
 
-      # Rodar Flask em background
+      # Rodar Flask em background (NOVO: espera até estar pronto)
       - name: Iniciar servidor Flask
         run: |
           nohup python app.py &> reports/flask.log &
-          sleep 5
+          # Espera até o Flask estar disponível
+          for i in {1..30}; do
+            curl -f http://127.0.0.1:5000/ && break || sleep 2
+          done
 
       # Executar DAST com OWASP ZAP
       - name: Executar DAST com OWASP ZAP
