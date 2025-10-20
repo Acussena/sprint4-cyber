@@ -7,7 +7,6 @@ on:
     branches: [main]
 
 jobs:
-  # Job 1: Build, Testes Unitários e Análise SCA/SAST
   build-and-scan:
     name: 1. Build, Testes Unitários e SCA/SAST
     runs-on: ubuntu-latest
@@ -17,43 +16,35 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout do código
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      # Setup Python
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.9"
 
-      # Instalar dependências Python antes de importar app.py
       - name: Instalar dependências Python
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-cov PyJWT
 
-      # Inicializar banco SQLite para testes
       - name: Criar banco de dados SQLite
         run: python -c "from app import init_db; init_db()"
 
-      # Rodar Testes Unitários
       - name: Rodar testes com pytest
         run: |
           mkdir -p reports
           pytest tests/ --maxfail=1 --disable-warnings -v | tee reports/pytest.log
 
-      # Instalar Snyk CLI
       - name: Instalar Snyk CLI
         run: npm install -g snyk
 
-      # Executar SCA com Snyk
       - name: Executar SCA com Snyk
         run: snyk test --severity-threshold=high --fail-on=all --skip-unresolved
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-      # Análise Estática (SAST) com CodeQL
       - name: Inicializar CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -64,41 +55,38 @@ jobs:
         env:
           CODEQL_FAIL_ON_ALERT: "true"
 
-  # Job 2: Análise Dinâmica (DAST)
   dynamic-analysis:
     name: 2. Análise Dinâmica (DAST)
     runs-on: ubuntu-latest
     needs: build-and-scan
-    services:
-      flask:
-        image: python:3.9
-        ports:
-          - 5000:5000
-        options: >-
-          --entrypoint /bin/bash
-        volumes:
-          - ./:/app
-        command: bash -c "cd /app && pip install -r requirements.txt && python app.py"
 
     steps:
-      - name: Checkout do código
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      # Setup Docker para ZAP
+      - name: Build Docker image do Flask
+        run: |
+          docker build -t my-flask-app .
+
+      - name: Rodar Flask em Docker
+        run: |
+          docker run -d --name flask-app -p 5000:5000 my-flask-app
+          # Espera o Flask estar pronto
+          for i in {1..30}; do
+            curl -f http://localhost:5000/ && break || sleep 2
+          done
+
       - name: Executar DAST com OWASP ZAP
         uses: zaproxy/action-baseline@v0.10.0
         with:
-          target: "http://flask:5000"
+          target: "http://host.docker.internal:5000"
           cmd_options: "-r reports/zap_report.html -l FAIL"
 
-      # Upload do Relatório DAST
       - name: Upload do Relatório DAST
         uses: actions/upload-artifact@v4
         with:
           name: Relatorio-DAST-ZAP
           path: reports/zap_report.html
 
-  # Job 3: Notificação em caso de falha
   notification-on-failure:
     name: 3. Notificar Falha
     runs-on: ubuntu-latest
