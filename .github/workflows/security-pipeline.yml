@@ -7,11 +7,12 @@ on:
     branches: [main]
 
 jobs:
-  # Job 1: Build e Testes Unitários
-  build-and-test:
-    name: 1. Build e Testes Unitários
+  # Job 1: Build, Testes Unitários e Análise SCA/SAST
+  build-and-scan:
+    name: 1. Build, Testes Unitários e SCA/SAST
     runs-on: ubuntu-latest
     permissions:
+      security-events: write
       actions: read
       contents: read
 
@@ -19,53 +20,36 @@ jobs:
       - name: Checkout do código
         uses: actions/checkout@v3
 
+      # Setup Python
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.9"
 
+      # Instalar dependências Python
       - name: Instalar dependências Python
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-cov PyJWT
 
-      - name: Inicializar banco SQLite
+      # Inicializar banco SQLite para testes
+      - name: Criar banco de dados SQLite
         run: python -c "from app import init_db; init_db()"
 
-      - name: Rodar testes unitários com pytest
+      # Rodar Testes Unitários
+      - name: Rodar testes com pytest
         run: |
           mkdir -p reports
           pytest tests/ --maxfail=1 --disable-warnings -v | tee reports/pytest.log
 
-  # Job 2: SCA com Snyk
-  snyk-scan:
-    name: 2. Análise de Dependências (SCA)
-    runs-on: ubuntu-latest
-    needs: build-and-test
-
-    steps:
-      - name: Checkout do código
-        uses: actions/checkout@v3
-
-      - name: Instalar Snyk
-        run: npm install -g snyk
-
-      - name: Executar Snyk
+      # Análise de Dependências (SCA) com Snyk
+      - name: Executar SCA com Snyk
+        run: snyk test --severity-threshold=high --fail-on=all --skip-unresolved
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk test --severity-threshold=high --fail-on=all
 
-  # Job 3: SAST com CodeQL
-  codeql-scan:
-    name: 3. Análise Estática (SAST)
-    runs-on: ubuntu-latest
-    needs: build-and-test
-
-    steps:
-      - name: Checkout do código
-        uses: actions/checkout@v3
-
+      # Análise Estática (SAST) com CodeQL
       - name: Inicializar CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -76,59 +60,72 @@ jobs:
         env:
           CODEQL_FAIL_ON_ALERT: "true"
 
-  # Job 4: DAST com Flask e OWASP ZAP CLI
-  dast-scan:
-    name: 4. Análise Dinâmica (DAST)
+  # Job 2: Análise Dinâmica (DAST)
+  dynamic-analysis:
+    name: 2. Análise Dinâmica (DAST)
     runs-on: ubuntu-latest
-    needs: build-and-test
+    needs: build-and-scan
 
     steps:
       - name: Checkout do código
         uses: actions/checkout@v3
 
+      # Setup Python
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.9"
 
+      # Instalar dependências Python
       - name: Instalar dependências Python
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pytest pytest-cov PyJWT python-owasp-zap-v2.4
 
-      - name: Iniciar servidor Flask em background
+      # Rodar Flask em background
+      - name: Iniciar servidor Flask
         run: |
+          mkdir -p reports
           nohup python app.py &> reports/flask.log &
           for i in {1..30}; do
             curl -f http://127.0.0.1:5000/ && break || sleep 2
           done
 
-      - name: Instalar OWASP ZAP CLI
-        run: sudo apt-get update && sudo apt-get install -y zaproxy
-
+      # Executar DAST com OWASP ZAP usando Python CLI
       - name: Executar DAST com OWASP ZAP
         run: |
-          mkdir -p reports
-          zap-baseline.py -t http://127.0.0.1:5000 -r reports/zap_report.html -l FAIL
+          python -m zapv2.zapcli --target http://127.0.0.1:5000 --report reports/zap_report.html --exit-code 1
 
+      # Upload do Relatório DAST
       - name: Upload do Relatório DAST
         uses: actions/upload-artifact@v4
         with:
           name: Relatorio-DAST-ZAP
           path: reports/zap_report.html
 
-  # Job 5: Notificação no Slack em caso de falha
+  # Job 3: Notificação em caso de falha
   notification-on-failure:
-    name: 5. Notificar Falha
+    name: 3. Notificar Falha
     runs-on: ubuntu-latest
     if: failure()
-    needs: [build-and-test, snyk-scan, codeql-scan, dast-scan]
+    needs: [build-and-scan, dynamic-analysis]
 
     steps:
+      - name: Verificar Slack Webhook
+        run: |
+          if [ -z "${SLACK_WEBHOOK}" ]; then
+            echo "Secret SLACK_WEBHOOK não definido. Pulando notificação."
+            exit 0
+          fi
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
       - name: Enviar notificação para o Slack
+        if: success() == false
         uses: rtCamp/action-slack-notify@v2
         env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_TITLE: "🚨 Falha no Pipeline de Segurança!"
           SLACK_MESSAGE: "O pipeline no repositório ${{ github.repository }} falhou. Verifique os logs para mais detalhes."
           SLACK_COLOR: "danger"
