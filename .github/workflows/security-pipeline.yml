@@ -71,25 +71,23 @@ jobs:
     services:
       # Serviço da Aplicação Flask
       app:
-        # A imagem será construída no passo "Build Docker image do Flask"
         image: my-flask-app
         options: >-
           --name flask-app
-          # Verifica se a aplicação está rodando na porta 5000 interna
           --health-cmd "curl -f http://localhost:5000 || exit 1" 
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+          --pull never # <-- CORREÇÃO: Força o uso da imagem local
         ports:
-          - 5000:5000 # Mapeia a porta para o host (para o health-check no step)
+          - 5000:5000
 
-      # Serviço do OWASP ZAP (apenas para colocá-lo na mesma rede)
+      # Serviço do OWASP ZAP
       zap:
         image: ghcr.io/zaproxy/zaproxy:stable
-        # Define um hostname simples para a comunicação interna, embora o scan será feito no serviço 'app'
         options: --hostname zap-scanner
         ports:
-          - 8080:8080 # Opcional, para debug
+          - 8080:8080
 
     steps:
       - uses: actions/checkout@v3
@@ -106,11 +104,10 @@ jobs:
           EOF
 
       - name: Build Docker image do Flask
-        # Este passo constrói a imagem necessária para o serviço 'app'
+        # Este passo constrói a imagem local 'my-flask-app'
         run: docker build -t my-flask-app .
 
       - name: Aguardar o Flask iniciar e passar no Health Check
-        # Esperamos o serviço 'app' (acessível via localhost:5000) estar totalmente pronto.
         run: |
           echo "Aguardando o serviço 'app' (Flask) iniciar..."
           for i in {1..30}; do
@@ -120,7 +117,6 @@ jobs:
             fi
             sleep 2
           done
-          # Se o loop terminar sem sucesso, a pipeline irá falhar
 
       - name: Instalar jq para análise de JSON
         run: sudo apt-get update && sudo apt-get install -y jq
@@ -130,11 +126,10 @@ jobs:
 
       - name: Executar ZAP Baseline Scan (Comando Docker Direto)
         run: |
-          # O ZAP acessa a aplicação pelo nome do serviço 'app' e sua porta interna
+          # TARGET: O ZAP acessa a aplicação pelo nome do serviço 'app' e sua porta interna (5000)
           TARGET="http://app:5000"
           REPORT_DIR="/zap/wrk"
 
-          # Executa o ZAP, anexando-o à mesma rede dos serviços
           docker run --rm -v ${{ github.workspace }}/reports:${REPORT_DIR}:rw \
             --network ${{ job.services.app.network }} \
             ghcr.io/zaproxy/zaproxy:stable \
@@ -143,11 +138,10 @@ jobs:
             -r ${REPORT_DIR}/zap_report.html \
             -J ${REPORT_DIR}/zap_report.json \
             -l FAIL \
-            -I # -I (Ignore) previne falhas se não houver alertas, mas ajuda a ignorar avisos menores.
+            -I
 
       - name: Verificar vulnerabilidades críticas ZAP
         run: |
-          # Instalar jq se ainda não estiver disponível no runner (já adicionado acima, mas redundância segura)
           CRITICAL=$(jq '.alerts[] | select(.risk=="High") | .name' reports/zap_report.json)
           if [ ! -z "$CRITICAL" ]; then
             echo "🚨 Vulnerabilidades críticas encontradas:"
