@@ -108,7 +108,7 @@ jobs:
           name: Relatorio-DAST-ZAP
           path: reports/zap_report.html
 
-  # Job 3: Notificação em caso de falhas
+  # Job 3: Notificação em caso de falha
   notification-on-failure:
     name: 3. Notificar Falha
     runs-on: ubuntu-latest
