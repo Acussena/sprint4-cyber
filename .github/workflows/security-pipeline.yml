@@ -100,7 +100,7 @@ jobs:
 
       # Upload do Relatório DAST
       - name: Upload do Relatório DAST
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Relatorio-DAST-ZAP
           path: reports/zap_report.html
