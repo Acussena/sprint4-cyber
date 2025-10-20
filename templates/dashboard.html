@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard de Segurança</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center">
+
+  <div class="bg-white shadow-lg rounded-2xl p-6 w-full max-w-3xl">
+    <h1 class="text-2xl font-bold text-center text-blue-700 mb-4">
+      Dashboard de Segurança 🔒
+    </h1>
+
+    <p class="text-gray-700 text-center mb-6">
+      Bem-vindo(a), <span class="font-semibold">{{ username }}</span>!<br>
+      Aqui estão os relatórios e resultados do pipeline de segurança automatizado.
+    </p>
+
+    {% if reports %}
+      <div class="space-y-4">
+        {% for nome, caminho in reports.items() %}
+          <div class="bg-gray-50 p-3 rounded-lg flex justify-between items-center border border-gray-200">
+            <span class="font-medium text-gray-800">📄 {{ nome | capitalize }} Report</span>
+            <a href="{{ caminho }}" class="text-blue-600 hover:underline" target="_blank">Ver relatório</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-center text-red-600 font-medium">
+        ⚠ Nenhum relatório foi encontrado.
+      </div>
+    {% endif %}
+  </div>
+
+</body>
+</html>

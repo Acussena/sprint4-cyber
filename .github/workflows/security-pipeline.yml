@@ -2,14 +2,14 @@ name: Pipeline de Segurança DevSecOps Unificado
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
-  # Job 1: Análise Estática e de Dependências
+  # Job 1: Build, Testes Unitários e Análise Estática
   build-and-scan:
-    name: 1. Build, SCA e SAST
+    name: 1. Build, Testes Unitários e SCA/SAST
     runs-on: ubuntu-latest
     permissions:
       security-events: write
@@ -20,34 +20,46 @@ jobs:
       - name: Checkout do código
         uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      - name: Setup Python e Instalar Dependências
+      # --- Setup Python ---
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
-      - run: pip install -r requirements.txt
+          python-version: "3.9"
 
-      - name: Executar Análise de Dependências (SCA) com Snyk
+      - name: Instalar dependências Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov sqlite3 jwt
+
+      # --- Inicializar banco SQLite para testes ---
+      - name: Criar banco de dados SQLite
+        run: |
+          python -c "from app import init_db; init_db()"
+
+      # --- Rodar Testes Unitários ---
+      - name: Rodar testes com pytest
+        run: |
+          pytest tests/ --maxfail=1 --disable-warnings -v
+
+      # --- Análise de Dependências (SCA) com Snyk ---
+      - name: Executar SCA com Snyk
         uses: snyk/actions/python-3.9@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          # Quality Gate: Falha se encontrar vulnerabilidades de severidade 'high' ou 'critical'
           args: --severity-threshold=high
 
-      - name: Inicializar o CodeQL (SAST)
+      # --- Análise Estática (SAST) com CodeQL ---
+      - name: Inicializar CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: python
 
-      - name: Executar a análise do CodeQL (SAST)
+      - name: Executar análise CodeQL
         uses: github/codeql-action/analyze@v3
 
-  # Job 2: Análise Dinâmica
+  # Job 2: Análise Dinâmica (DAST)
   dynamic-analysis:
     name: 2. Análise Dinâmica (DAST)
     runs-on: ubuntu-latest
@@ -57,13 +69,31 @@ jobs:
       - name: Checkout do código
         uses: actions/checkout@v3
 
-      - name: Executar Análise Dinâmica (DAST) com OWASP ZAP
+      # --- Setup Python ---
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Instalar dependências Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # --- Rodar Flask em background ---
+      - name: Iniciar servidor Flask
+        run: |
+          nohup python app.py &
+          sleep 5
+
+      # --- Executar DAST com OWASP ZAP ---
+      - name: Executar DAST com OWASP ZAP
         uses: zaproxy/action-baseline@v0.10.0
         with:
-          # Quality Gate: Falha para alertas de nível 'WARN' (Médio) ou superior
-          cmd_options: '-r zap_report.html -l WARN'
-          target: 'https://www.zaproxy.org/'
+          cmd_options: "-r zap_report.html -l WARN"
+          target: "http://127.0.0.1:5000" # seu Flask local
 
+      # --- Upload do Relatório DAST ---
       - name: Upload do Relatório DAST
         uses: actions/upload-artifact@v3
         with:
@@ -82,7 +112,7 @@ jobs:
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_TITLE: '🚨 Falha no Pipeline de Segurança!'
-          SLACK_MESSAGE: 'O pipeline no repositório ${{ github.repository }} falhou. Verifique os logs para mais detalhes.'
-          SLACK_COLOR: 'danger'
+          SLACK_TITLE: "🚨 Falha no Pipeline de Segurança!"
+          SLACK_MESSAGE: "O pipeline no repositório ${{ github.repository }} falhou. Verifique os logs para mais detalhes."
+          SLACK_COLOR: "danger"
           MSG_MINIMAL: true
