@@ -91,14 +91,14 @@ jobs:
       - name: Criar pasta reports
         run: mkdir -p reports
 
-      - name: Executar DAST com OWASP ZAP
-        uses: zaproxy/action-baseline@v0.10.0
-        with:
-          target: "http://flask-app:5000"
-          cmd_options: "-r reports/zap_report.html -J reports/zap_report.json -l FAIL"
-          artifact_name: "Relatorio-DAST-ZAP"
-        env:
-          DOCKER_NETWORK: zapnet
+      - name: Executar DAST com OWASP ZAP (via Docker)
+        run: |
+          docker run --rm --network zapnet -v $(pwd)/reports:/zap/wrk/:rw \
+            owasp/zap2docker-stable zap-baseline.py \
+            -t http://flask-app:5000 \
+            -r /zap/wrk/zap_report.html \
+            -J /zap/wrk/zap_report.json \
+            -l FAIL
 
       - name: Verificar vulnerabilidades críticas ZAP
         run: |
