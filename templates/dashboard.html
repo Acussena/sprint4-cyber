@@ -9,10 +9,9 @@
 <body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center">
 
   <div class="bg-white shadow-lg rounded-2xl p-6 w-full max-w-3xl">
-    <!-- Botão de retorno -->
-    <div class="flex justify-end mb-4">
-      <a href="/" class="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 font-bold">
-        Voltar ao Menu
+    <div class="mb-4">
+      <a href="/" class="text-blue-600 hover:underline font-medium">
+        ← Voltar ao Menu
       </a>
     </div>
 
@@ -22,23 +21,17 @@
 
     <p class="text-gray-700 text-center mb-6">
       Bem-vindo(a), <span class="font-semibold">{{ username }}</span>!<br>
-      Aqui estão os relatórios e resultados do pipeline de segurança automatizado.
+      Clique no link abaixo para acessar o dashboard de segurança:
     </p>
 
-    {% if reports %}
-      <div class="space-y-4">
-        {% for nome, caminho in reports.items() %}
-          <div class="bg-gray-50 p-3 rounded-lg flex justify-between items-center border border-gray-200">
-            <span class="font-medium text-gray-800">📄 {{ nome | capitalize }} Report</span>
-            <a href="{{ caminho }}" class="text-blue-600 hover:underline" target="_blank">Ver relatório</a>
-          </div>
-        {% endfor %}
-      </div>
-    {% else %}
-      <div class="text-center text-red-600 font-medium">
-        ⚠ Nenhum relatório foi encontrado.
-      </div>
-    {% endif %}
+    <div class="text-center">
+      <a href="https://app.snyk.io/org/fabr1c100/project/e482d376-c9b4-44bd-99be-c88acebf052f/history" 
+         class="text-blue-600 hover:underline font-bold" 
+         target="_blank">
+        Acessar Dashboard Snyk
+      </a>
+    </div>
+    
   </div>
 
 </body>

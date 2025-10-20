@@ -98,7 +98,7 @@ jobs:
       - name: Instalar Snyk CLI
         run: npm install -g snyk
 
-      # --- Inicia a Aplicação Flask (sem Docker) ---
+      # --- Inicia a Aplicação Flask
       - name: Iniciar Aplicação Flask em background
         run: |
           # Rodar o Flask na porta 5000 do host
@@ -123,17 +123,13 @@ jobs:
       - name: Criar pasta reports
         run: mkdir -p reports
 
-      # --- NOVO PASSO: Executar Snyk para DAST (URL Scan) ---
+      # Executar Snyk para DAST (URL Scan)
       - name: Executar Snyk URL Scan (DAST)
         # O Snyk CLI escaneia a URL que está exposta no localhost
         run: |
           snyk monitor --url=http://localhost:5000 --severity-threshold=high --json > reports/snyk_dast_report.json
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      # NOTA: A verificação de falha é feita pela flag --fail-on-all no SCA/SAST.
-      # Para o DAST, o snyk monitor não retorna código de falha para vulnerabilidades,
-      # apenas reporta. Você pode usar snyk test --url=... para falhar o pipeline se quiser.
 
       - name: Upload do Relatório DAST
         uses: actions/upload-artifact@v4
