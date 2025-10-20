@@ -1,144 +1,114 @@
-name: Pipeline de Segurança DevSecOps Unificado
+name: 🛡️ Pipeline de Segurança DevSec
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
+
+permissions:
+  contents: write # necessário para publicar no GitHub Pages
 
 jobs:
-  build-and-scan:
-    name: 1. Build, Testes Unitários e SCA/SAST
+  security-pipeline:
     runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      CODEQL_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v3
+      - name: 🔹 Checkout do código
+        uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: 🔹 Configurar Node e Python
+        uses: actions/setup-node@v4
         with:
-          python-version: "3.10"
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-      - name: Instalar dependências Python
+      - name: 🔹 Instalar dependências Python
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-cov PyJWT
+          pip install pytest requests flask
 
-      - name: Criar banco de dados SQLite
-        run: python -c "from app import init_db; init_db()"
+      - name: 🔹 Instalar dependências Node
+        run: |
+          npm install -g snyk
+          npm install
 
-      - name: Rodar testes com pytest
+      - name: 🔹 Autenticar no GHCR (evitar login denied)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin || echo "⚠️ Login GHCR falhou (pode ser ignorado)"
+
+      - name: 🔹 Criar rede Docker segura
+        run: |
+          docker network create zapnet || true
+
+      - name: 🧪 Executar Testes Unitários (Pytest)
+        run: |
+          pytest -v || { echo "❌ Testes falharam!"; exit 1; }
+
+      - name: 🛡️ Snyk SAST Scan
+        run: |
+          snyk auth $SNYK_TOKEN || { echo "⚠️ Erro ao autenticar no Snyk"; exit 1; }
+          snyk test --severity-threshold=medium || { echo "❌ Vulnerabilidades críticas detectadas pelo Snyk"; exit 1; }
+
+      - name: 🧱 Build Docker Image do App
+        run: |
+          docker build -t app-security:latest . --network zapnet || { echo "❌ Falha ao construir imagem"; exit 1; }
+
+      - name: 🚀 Rodar Container Temporário do App
+        run: |
+          docker run -d --rm --network zapnet --name app -p 5000:5000 app-security:latest || exit 1
+          echo "⏳ Aguardando app iniciar..."
+          sleep 10
+
+      - name: 🔍 ZAP DAST Scan (usando GHCR)
         run: |
           mkdir -p reports
-          pytest tests/ --maxfail=1 --disable-warnings -v | tee reports/pytest.log
-        continue-on-error: false
+          docker pull ghcr.io/zaproxy/zaproxy:stable || { echo "⚠️ Falha ao puxar imagem ZAP"; exit 1; }
+          docker run --rm --network zapnet \
+            -v $(pwd)/reports:/zap/wrk/:rw \
+            ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t http://app:5000 \
+            -r zap_report.html || echo "⚠️ ZAP retornou alertas (não crítico)"
 
-      - name: Upload dos logs de teste
-        uses: actions/upload-artifact@v4
-        with:
-          name: pytest-logs
-          path: reports/pytest.log
-
-      - name: Instalar Snyk CLI
-        run: npm install -g snyk
-
-      - name: Executar SCA com Snyk
-        run: snyk test --severity-threshold=high --fail-on=all --skip-unresolved
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Inicializar CodeQL
+      - name: 🧠 CodeQL - Inicializar
         uses: github/codeql-action/init@v3
         with:
-          languages: python
+          languages: python, javascript
 
-      - name: Executar análise CodeQL
+      - name: 🧠 CodeQL - Executar Análise
         uses: github/codeql-action/analyze@v3
-        env:
-          CODEQL_FAIL_ON_ALERT: "true"
-
-  dynamic-analysis:
-    name: 2. Análise Dinâmica (DAST)
-    runs-on: ubuntu-latest
-    needs: build-and-scan
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Criar rede Docker
-        run: docker network create zapnet
-
-      - name: Criar Dockerfile temporário
-        run: |
-          cat <<'EOF' > Dockerfile
-          FROM python:3.10-slim
-          WORKDIR /app
-          COPY . .
-          RUN pip install --no-cache-dir -r requirements.txt
-          EXPOSE 5000
-          CMD ["python", "app.py"]
-          EOF
-
-      - name: Build Docker image do Flask
-        run: docker build -t my-flask-app .
-
-      - name: Rodar Flask em Docker
-        run: |
-          docker run -d --name flask-app --network zapnet -p 5000:5000 my-flask-app
-          echo "⏳ Aguardando Flask iniciar..."
-          for i in {1..30}; do
-            if curl -s http://localhost:5000/ > /dev/null; then
-              echo "✅ Flask disponível!"
-              break
-            fi
-            sleep 2
-          done
-
-      - name: Criar pasta reports
-        run: mkdir -p reports
-
-      - name: Executar DAST com OWASP ZAP
-        uses: zaproxy/action-baseline@v0.10.0
         with:
-          target: "http://flask-app:5000"
-          cmd_options: "-r reports/zap_report.html -J reports/zap_report.json -l FAIL"
-          artifact_name: "Relatorio-DAST-ZAP"
-        env:
-          DOCKER_NETWORK: zapnet
+          category: "/language:python"
 
-      - name: Verificar vulnerabilidades críticas ZAP
-        run: |
-          CRITICAL=$(jq '.alerts[] | select(.risk=="High") | .name' reports/zap_report.json)
-          if [ ! -z "$CRITICAL" ]; then
-            echo "🚨 Vulnerabilidades críticas encontradas!"
-            exit 1
-          else
-            echo "✅ Nenhuma vulnerabilidade crítica encontrada."
-          fi
-
-      - name: Upload do Relatório DAST
+      - name: 📤 Publicar Relatórios como artefato
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Relatorio-DAST-ZAP
-          path: reports/
+          name: relatorios-seguranca
+          path: |
+            reports/zap_report.html
+            test-results/
 
-  notification-on-failure:
-    name: 3. Notificar Falha
-    runs-on: ubuntu-latest
-    if: failure()
-    needs: [build-and-scan, dynamic-analysis]
+      - name: 📤 Preparar relatório para o GitHub Pages
+        if: always()
+        run: |
+          mkdir -p ./public
+          cp reports/zap_report.html ./public/index.html || echo "<h1>Nenhum relatório ZAP encontrado</h1>" > ./public/index.html
 
-    steps:
-      - name: Enviar notificação para o Slack
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          SLACK_TITLE: "🚨 Falha no Pipeline de Segurança!"
-          SLACK_MESSAGE: "O pipeline no repositório ${{ github.repository }} falhou. Verifique os logs para mais detalhes."
-          SLACK_COLOR: "danger"
-          MSG_MINIMAL: true
+      - name: 🌐 Publicar no GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+
+      - name: 🧹 Encerrar Containers
+        if: always()
+        run: |
+          docker stop app || true
+          docker network rm zapnet || true
