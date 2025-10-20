@@ -29,10 +29,7 @@ jobs:
       - name: Instalar dependências Python
         run: |
           python -m pip install --upgrade pip
-          # Instalar pacotes antigos fixos sem resolver dependências
-          pip install --no-deps -r requirements.txt
-          # Instalar pytest e dependências completas
-          pip install pytest pytest-cov pyjwt
+          pip install -r requirements.txt
 
       # Inicializar banco SQLite para testes
       - name: Criar banco de dados SQLite
@@ -50,7 +47,7 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high --fail-on=upgradable
+          args: --severity-threshold=high --fail-on=all
 
       # Análise Estática (SAST) com CodeQL
       - name: Inicializar CodeQL
@@ -82,12 +79,11 @@ jobs:
       - name: Instalar dependências Python
         run: |
           python -m pip install --upgrade pip
-          pip install --no-deps -r requirements.txt
+          pip install -r requirements.txt
 
       # Rodar Flask em background
       - name: Iniciar servidor Flask
         run: |
-          mkdir -p reports
           nohup python app.py &> reports/flask.log &
           sleep 5
 
